@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NIDS
+Comment=Network Intrusion Detection System
+Exec=/home/kali/Desktop/nids_edit/nids.sh
+Icon=security-high
+Terminal=false
+Categories=Network;Security;System;
+Keywords=firewall;intrusion;detection;network;security;
