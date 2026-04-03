@@ -97,7 +97,7 @@ def _handle_arp(pkt):
     src_mac = pkt[Ether].src.upper()
     cooldown = _cfg["spoof"].get("arp_alert_cooldown", 30)
 
-    if src_ip in _safe_ips or src_ip == _defense_ip:
+    if src_ip == _defense_ip:
         return
 
     now = time.time()
