@@ -20,6 +20,11 @@ To find gateway:
 
 STEP 2: DEFENSE KALI
 ---------------------
+ARP spoof blocking needs nftables (drops frames at netdev ingress on your interface):
+  sudo apt install nftables
+  Note: arpspoof on the ATTACKER will still print lines — it only logs what it SENDS.
+  Blocking runs on the DEFENDER; check there (e.g. arp -n) that the poison does not stick.
+
 Start NIDS:       sudo python3 gui.py
 Start SSH:        ./hostbruteforce.sh
 Check iptables:   sudo iptables -L INPUT -n --line-numbers

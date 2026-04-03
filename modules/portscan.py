@@ -6,12 +6,11 @@ Uses Scapy to sniff for rapid probes across many ports and blocks scanners.
 
 from scapy.all import sniff, IP, TCP, Ether
 import time
-import threading
 from collections import defaultdict, deque
 
 from modules.firewall import ensure_chain, flush_chain, block_ip, run, ts
 from modules.netutil import get_interface_ip
-from config import load_config, save_config
+from modules.detected_mac_persist import persist as persist_detected_mac
 
 CHAIN = "NIDS_PORTSCAN"
 
@@ -36,25 +35,6 @@ def _emit(msg):
         _callback(line)
     else:
         print(line, flush=True)
-
-
-_persist_lock = threading.Lock()
-
-
-def _persist_detected_mac(mac, ip):
-    """Save attacker MAC to detected list for user review."""
-    with _persist_lock:
-        try:
-            cfg = load_config()
-            detected = cfg["macfilter"].get("detected_macs", [])
-            existing = {e["mac"] for e in detected if isinstance(e, dict)}
-            if mac not in existing:
-                detected.append({"mac": mac, "last_ip": ip, "first_seen": ts()})
-                cfg["macfilter"]["detected_macs"] = detected
-                save_config(cfg)
-                _emit(f"[INFO] MAC {mac} added to detected list for review")
-        except Exception as e:
-            _emit(f"[WARN] Could not persist detected MAC: {e}")
 
 
 def _cleanup_old(src, now, window):
@@ -100,7 +80,7 @@ def _on_packet(pkt):
         block_ip(CHAIN, src)
         blocked_ips.add(src)
         if src_mac != "unknown":
-            _persist_detected_mac(src_mac, src)
+            persist_detected_mac(src_mac, src, _emit)
         _emit(f"[BLOCK] Blocked {src}")
         seen_ports[src].clear()
         seen_syns[src].clear()

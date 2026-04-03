@@ -16,6 +16,8 @@ from collections import defaultdict, deque
 
 from modules.firewall import ensure_chain, flush_chain, block_ip, block_mac, ts
 from modules.netutil import get_interface_ip, get_local_network, get_default_gateway
+from modules import arpnft
+from modules.detected_mac_persist import persist as persist_detected_mac
 
 CHAIN = "NIDS_SPOOF"
 
@@ -118,7 +120,17 @@ def _handle_arp(pkt):
                 arp_cooldowns[cooldown_key] = now
                 block_mac(CHAIN, src_mac)
                 blocked_macs.add(src_mac)
-                _emit(f"[BLOCK] Blocked attacker MAC {src_mac} (ARP poisoning)")
+                if arpnft.arp_block_mac(src_mac, _cfg["interface"]):
+                    _emit(
+                        f"[BLOCK] Blocked attacker MAC {src_mac} "
+                        f"(ARP poisoning — iptables + nftables ARP drop)"
+                    )
+                else:
+                    _emit(
+                        f"[BLOCK] Blocked attacker MAC {src_mac} "
+                        f"(ARP poisoning — install nftables + sudo for full ARP drop)"
+                    )
+                persist_detected_mac(src_mac, "?", _emit)
                 return
 
     arp_table[src_ip] = src_mac
@@ -249,6 +261,7 @@ def run_detector(cfg, stop_event=None):
             )
     finally:
         flush_chain(CHAIN)
+        arpnft.arp_flush_blocked()
         _emit("[STOP] Spoof detector stopped")
 
 

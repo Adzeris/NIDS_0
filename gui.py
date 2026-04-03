@@ -600,6 +600,29 @@ class MainWindow(QMainWindow):
 
     # ---- Detected MAC helpers ---------------------------------------------
 
+    def _detected_item_mac(self, item):
+        mac = item.data(Qt.UserRole)
+        if mac:
+            return mac
+        return item.text().split(" ")[0]
+
+    def _add_detected_row(self, mac, last_ip=None, first_seen=None):
+        mac = mac.strip().upper()
+        lip = str(last_ip).strip().upper() if last_ip is not None else ""
+        if last_ip and str(last_ip).strip() and lip not in ("N/A", "?"):
+            text = str(last_ip).strip()
+            tip_parts = [f"MAC {mac}"]
+            if first_seen:
+                tip_parts.append(str(first_seen))
+            tip = "\n".join(tip_parts)
+        else:
+            text = mac
+            tip = "No IP on file" + (f"\n{first_seen}" if first_seen else "")
+        it = QListWidgetItem(text)
+        it.setData(Qt.UserRole, mac)
+        it.setToolTip(tip)
+        self.mac_det_list.addItem(it)
+
     def _get_selected_detected_mac(self):
         items = self.mac_det_list.selectedItems()
         if not items:
@@ -610,8 +633,7 @@ class MainWindow(QMainWindow):
             items = self.mac_det_list.selectedItems()
             if not items:
                 return None, None
-        text = items[0].text()
-        mac = text.split(" ")[0]
+        mac = self._detected_item_mac(items[0])
         row = self.mac_det_list.row(items[0])
         return mac, row
 
@@ -652,10 +674,13 @@ class MainWindow(QMainWindow):
         self.mac_det_list.clear()
         for entry in cfg["macfilter"].get("detected_macs", []):
             if isinstance(entry, dict):
-                label = f"{entry['mac']}  (IP: {entry.get('last_ip', '?')}, seen: {entry.get('first_seen', '?')})"
+                self._add_detected_row(
+                    entry["mac"],
+                    entry.get("last_ip"),
+                    entry.get("first_seen"),
+                )
             else:
-                label = str(entry)
-            self.mac_det_list.addItem(label)
+                self._add_detected_row(str(entry))
 
     # ---- MAC helpers -----------------------------------------------------
 
@@ -686,7 +711,8 @@ class MainWindow(QMainWindow):
                 unblock_mac("NIDS_MACFILTER", mac)
                 self.statusBar().showMessage(f"MAC {mac} unblocked", 3000)
             elif list_widget is self.mac_wl_list:
-                self.mac_det_list.addItem(mac)
+                self._add_detected_row(mac)
+                self._save_config_from_ui()
                 self.statusBar().showMessage(f"MAC {mac} moved to Detected for review", 3000)
 
     def _add_spoof_whitelist_ip(self):
@@ -751,10 +777,13 @@ class MainWindow(QMainWindow):
         self.mac_det_list.clear()
         for entry in mc.get("detected_macs", []):
             if isinstance(entry, dict):
-                label = f"{entry['mac']}  (IP: {entry.get('last_ip', '?')}, seen: {entry.get('first_seen', '?')})"
+                self._add_detected_row(
+                    entry["mac"],
+                    entry.get("last_ip"),
+                    entry.get("first_seen"),
+                )
             else:
-                label = str(entry)
-            self.mac_det_list.addItem(label)
+                self._add_detected_row(str(entry))
 
     def _save_config_from_ui(self):
         c = self.cfg
@@ -803,16 +832,22 @@ class MainWindow(QMainWindow):
         ]
 
         gui_det_macs = set()
-        det_list = []
         for i in range(self.mac_det_list.count()):
-            mac = self.mac_det_list.item(i).text().split(" ")[0]
-            gui_det_macs.add(mac)
+            it = self.mac_det_list.item(i)
+            gui_det_macs.add(self._detected_item_mac(it).upper())
+
         on_disk = load_config()["macfilter"].get("detected_macs", [])
+        det_list = []
+        merged = set()
         for entry in on_disk:
-            m = entry["mac"] if isinstance(entry, dict) else entry
+            m = (entry["mac"] if isinstance(entry, dict) else entry).upper()
             if m in gui_det_macs:
-                det_list.append(entry)
-                gui_det_macs.discard(m)
+                det_list.append(entry if isinstance(entry, dict) else {"mac": m, "last_ip": "?", "first_seen": ""})
+                merged.add(m)
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        for m in gui_det_macs:
+            if m not in merged:
+                det_list.append({"mac": m, "last_ip": "?", "first_seen": ts})
         c["macfilter"]["detected_macs"] = det_list
 
         save_config(c)
@@ -857,7 +892,9 @@ class MainWindow(QMainWindow):
         for chain in ["NIDS_PORTSCAN", "NIDS_BRUTEFORCE", "NIDS_DOS", "NIDS_SPOOF", "NIDS_MACFILTER"]:
             flush_chain(chain)
         _destroy("NIDS_BLOCK")
-        self._on_log_line(f"{ts} [ENGINE] All iptables blocks cleared")
+        self._on_log_line(f"{ts} [ENGINE] All blocks cleared")
+        from modules import arpnft
+        arpnft.arp_flush_blocked()
 
         # Also flush DNS cache
         resolvers = [
@@ -903,6 +940,8 @@ class MainWindow(QMainWindow):
         if "[BLOCK]" in line:
             self._block_count += 1
             self.block_label.setText(f"Blocks: {self._block_count}")
+        if "added to detected list for review" in line:
+            self._refresh_detected()
 
     def _on_stopped(self):
         self.start_btn.setEnabled(True)

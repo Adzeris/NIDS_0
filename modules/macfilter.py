@@ -7,10 +7,9 @@ Uses Scapy to inspect Ethernet headers and iptables mac-match to enforce.
 
 from scapy.all import sniff, Ether, IP
 import time
-import threading
 
 from modules.firewall import ensure_chain, flush_chain, block_mac, unblock_mac, ts
-from config import load_config, save_config
+from modules.detected_mac_persist import persist as persist_detected_mac
 
 CHAIN = "NIDS_MACFILTER"
 
@@ -30,25 +29,6 @@ def _emit(msg):
         _callback(line)
     else:
         print(line, flush=True)
-
-
-_persist_lock = threading.Lock()
-
-
-def _persist_detected_mac(mac, ip):
-    """Save a detected MAC to config so it survives restarts."""
-    with _persist_lock:
-        try:
-            cfg = load_config()
-            detected = cfg["macfilter"].get("detected_macs", [])
-            existing = {e["mac"] for e in detected if isinstance(e, dict)}
-            if mac not in existing:
-                detected.append({"mac": mac, "last_ip": ip, "first_seen": ts()})
-                cfg["macfilter"]["detected_macs"] = detected
-                save_config(cfg)
-                _emit(f"[INFO] MAC {mac} added to detected list for review")
-        except Exception as e:
-            _emit(f"[WARN] Could not persist detected MAC: {e}")
 
 
 def _on_packet(pkt, cfg):
@@ -74,7 +54,7 @@ def _on_packet(pkt, cfg):
         _emit(f"[ALERT] Unauthorised MAC {src_mac} (IP: {src_ip}) — blocking")
         block_mac(CHAIN, src_mac)
         _blocked_macs.add(src_mac)
-        _persist_detected_mac(src_mac, src_ip)
+        persist_detected_mac(src_mac, src_ip, _emit)
         _emit(f"[BLOCK] MAC {src_mac} dropped via {CHAIN}")
 
     if not should_block and src_mac in _blocked_macs:
