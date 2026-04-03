@@ -45,16 +45,11 @@ BOGON_NETS_BLOCK = [
     ipaddress.ip_network("240.0.0.0/4"),
 ]
 
-BOGON_NETS_ALERT_ONLY = [
-    ipaddress.ip_network("0.0.0.0/8"),
-    ipaddress.ip_network("100.64.0.0/10"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("224.0.0.0/4"),
-]
 
 DHCP_SAFE = {
     ipaddress.ip_address("0.0.0.0"),
     ipaddress.ip_address("255.255.255.255"),
+    ipaddress.ip_address("169.254.169.254"),
 }
 
 def set_callback(fn):
@@ -80,8 +75,6 @@ def _classify_bogon(addr):
         return "safe"
     if any(ip in net for net in BOGON_NETS_BLOCK):
         return "block"
-    if any(ip in net for net in BOGON_NETS_ALERT_ONLY):
-        return "alert"
     return None
 
 
@@ -147,9 +140,6 @@ def _handle_ip(pkt):
         _emit(f"[ALERT] Bogon source detected: {src}")
         _block(src, "bogon address")
         return
-    if bogon_class == "alert":
-        _emit(f"[INFO] Bogon-range traffic from {src} (alert only, not blocked)")
-        return
 
     ttl = pkt[IP].ttl
     if ttl <= 1 or ttl == 255:
@@ -205,6 +195,8 @@ def run_detector(cfg, stop_event=None):
     _safe_ips = {"0.0.0.0", "255.255.255.255"}
     if _gateway_ip:
         _safe_ips.add(_gateway_ip)
+    if cfg["spoof"].get("whitelist_host") and cfg["spoof"].get("host_ip", "").strip():
+        _safe_ips.add(cfg["spoof"]["host_ip"].strip())
     for ip_str in cfg["spoof"].get("whitelist_ips", []):
         _safe_ips.add(ip_str.strip())
 
@@ -220,6 +212,8 @@ def run_detector(cfg, stop_event=None):
     _emit(f"[START] Spoof detector on {iface} (IP: {_defense_ip}, subnet: {_local_net})")
     if _gateway_ip:
         _emit(f"[INFO] Gateway {_gateway_ip} auto-whitelisted")
+    if cfg["spoof"].get("whitelist_host") and cfg["spoof"].get("host_ip", "").strip():
+        _emit(f"[INFO] Host machine {cfg['spoof']['host_ip'].strip()} whitelisted")
     _emit(f"[INFO] ARP watch: {cfg['spoof'].get('arp_watch', True)}, "
           f"TTL deviation threshold: {cfg['spoof'].get('ttl_deviation', 15)}, "
           f"blocks persist until NIDS stops")

@@ -22,10 +22,9 @@ DEFAULTS = {
 
     "portscan": {
         "window_sec": 5,
-        "port_threshold": 25,
-        "syn_threshold": 40,
+        "port_threshold": 10,
+        "syn_threshold": 15,
         "block_seconds": 120,
-        "warmup_sec": 3,
     },
 
     "bruteforce": {
@@ -41,6 +40,8 @@ DEFAULTS = {
 
     "spoof": {
         "arp_watch": True,
+        "whitelist_host": False,
+        "host_ip": "",
         "arp_alert_cooldown": 60,
         "ttl_deviation": 20,
         "ttl_min_samples": 20,

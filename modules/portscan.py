@@ -9,7 +9,7 @@ import time
 import threading
 from collections import defaultdict, deque
 
-from modules.firewall import ensure_chain, flush_chain, block_ip, ts
+from modules.firewall import ensure_chain, flush_chain, block_ip, run, ts
 from modules.netutil import get_interface_ip
 from config import load_config, save_config
 
@@ -66,9 +66,7 @@ def _cleanup_old(src, now, window):
 
 def _on_packet(pkt):
     now = time.time()
-    warmup = _cfg["portscan"]["warmup_sec"]
-
-    if now - _start_time < warmup:
+    if now - _start_time < 1:
         return
     if not (IP in pkt and TCP in pkt):
         return
@@ -123,6 +121,14 @@ def run_detector(cfg, stop_event=None):
 
     ensure_chain(CHAIN)
     flush_chain(CHAIN)
+
+    syn_thr = cfg["portscan"]["syn_threshold"]
+    window = cfg["portscan"]["window_sec"]
+    run(["sudo", "iptables", "-A", CHAIN, "-p", "tcp", "--syn", "-m", "recent",
+         "--name", "nids_ps", "--set"])
+    run(["sudo", "iptables", "-A", CHAIN, "-p", "tcp", "--syn", "-m", "recent",
+         "--name", "nids_ps", "--rcheck", "--seconds", str(window),
+         "--hitcount", str(syn_thr), "-j", "DROP"])
 
     _emit(f"[START] Port-scan detector on {iface} (IP: {_defense_ip})")
 

@@ -411,6 +411,13 @@ class MainWindow(QMainWindow):
         sp_lay.addRow("TTL min samples:", self.spin_sp_ttl_samples)
         sp_lay.addRow("Block duration (sec):", self.spin_sp_block)
 
+        self.chk_whitelist_host = QCheckBox("Whitelist host machine IP (for bridged mode)")
+        sp_lay.addRow(self.chk_whitelist_host)
+        self.host_ip_edit = QLineEdit()
+        self.host_ip_edit.setPlaceholderText("e.g. 192.168.1.100")
+        self.host_ip_edit.setMinimumHeight(30)
+        sp_lay.addRow("Host machine IP:", self.host_ip_edit)
+
         wl_label = QLabel("IP Whitelist (never blocked by spoof detector):")
         wl_label.setStyleSheet("color: #8b949e; margin-top: 6px;")
         sp_lay.addRow(wl_label)
@@ -717,6 +724,8 @@ class MainWindow(QMainWindow):
 
         sp = c["spoof"]
         self.chk_arp_watch.setChecked(sp.get("arp_watch", True))
+        self.chk_whitelist_host.setChecked(sp.get("whitelist_host", False))
+        self.host_ip_edit.setText(sp.get("host_ip", ""))
         self.spin_sp_arp_cooldown.setValue(sp.get("arp_alert_cooldown", 30))
         self.spin_sp_ttl_dev.setValue(sp.get("ttl_deviation", 15))
         self.spin_sp_ttl_samples.setValue(sp.get("ttl_min_samples", 10))
@@ -766,6 +775,8 @@ class MainWindow(QMainWindow):
         c["dos"]["block_seconds"] = self.spin_dos_block.value()
 
         c["spoof"]["arp_watch"] = self.chk_arp_watch.isChecked()
+        c["spoof"]["whitelist_host"] = self.chk_whitelist_host.isChecked()
+        c["spoof"]["host_ip"] = self.host_ip_edit.text().strip()
         c["spoof"]["arp_alert_cooldown"] = self.spin_sp_arp_cooldown.value()
         c["spoof"]["ttl_deviation"] = self.spin_sp_ttl_dev.value()
         c["spoof"]["ttl_min_samples"] = self.spin_sp_ttl_samples.value()
@@ -860,13 +871,19 @@ class MainWindow(QMainWindow):
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 continue
 
-        # Clear runtime blocked sets so detectors can re-detect
-        from modules import portscan, dos, spoof, macfilter
-        for mod in [portscan, dos, spoof, macfilter]:
+        # Clear all runtime state so detectors can re-detect
+        from modules import portscan, bruteforce, dos, spoof, macfilter
+        for mod in [portscan, bruteforce, dos, spoof, macfilter]:
             if hasattr(mod, 'blocked_ips'):
                 mod.blocked_ips.clear()
             if hasattr(mod, '_blocked_macs'):
                 mod._blocked_macs.clear()
+        portscan.seen_ports.clear()
+        portscan.seen_syns.clear()
+        bruteforce.failures.clear()
+        spoof.arp_table.clear()
+        spoof.arp_cooldowns.clear()
+        spoof.ttl_alert_cooldowns.clear()
 
         self.statusBar().showMessage("All blocks cleared + DNS flushed", 3000)
 
