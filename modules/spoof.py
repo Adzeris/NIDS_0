@@ -9,7 +9,7 @@ Real-world detection methods:
      is spoofing that source address).
 """
 
-from scapy.all import sniff, ARP, IP, Ether
+from scapy.all import sniff, ARP, IP, Ether, srp
 import time
 import ipaddress
 from collections import defaultdict, deque
@@ -172,7 +172,7 @@ def _handle_ip(pkt):
 
 def _on_packet(pkt):
     now = time.time()
-    if now - _start_time < 3:
+    if now - _start_time < 1:
         return
 
     if pkt.haslayer(ARP):
@@ -202,6 +202,18 @@ def run_detector(cfg, stop_event=None):
 
     arp_table.clear()
     arp_cooldowns.clear()
+
+    if _gateway_ip:
+        try:
+            ans, _ = srp(Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=_gateway_ip),
+                         iface=iface, timeout=2, verbose=False)
+            for _, rcv in ans:
+                gw_mac = rcv[Ether].src.upper()
+                arp_table[_gateway_ip] = gw_mac
+                _emit(f"[INFO] Gateway MAC baseline: {_gateway_ip} = {gw_mac}")
+                break
+        except Exception:
+            pass
     ttl_baselines.clear()
     ttl_alert_cooldowns.clear()
     blocked_ips.clear()
