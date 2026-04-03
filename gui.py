@@ -24,6 +24,9 @@ from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QIcon, QPalette
 from config import load_config, save_config
 from engine import NIDSEngine
 
+_MAC_MODE_UI_TO_CFG = {"Allow Only": "whitelist", "Block Only": "blacklist"}
+_MAC_MODE_CFG_TO_UI = {v: k for k, v in _MAC_MODE_UI_TO_CFG.items()}
+
 
 # ---------------------------------------------------------------------------
 # Worker thread that bridges the engine to the Qt event loop
@@ -463,7 +466,7 @@ class MainWindow(QMainWindow):
         mode_grp = QGroupBox("Filter Mode")
         mode_lay = QHBoxLayout(mode_grp)
         self.mac_mode_combo = QComboBox()
-        self.mac_mode_combo.addItems(["whitelist", "blacklist"])
+        self.mac_mode_combo.addItems(["Allow Only", "Block Only"])
         mode_lay.addWidget(QLabel("Mode:"))
         mode_lay.addWidget(self.mac_mode_combo)
         mode_lay.addStretch()
@@ -494,7 +497,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(det_grp)
 
         # Blacklist
-        bl_grp = QGroupBox("Blocked MACs (Blacklist)")
+        bl_grp = QGroupBox("Blocked MACs")
         bl_lay = QVBoxLayout(bl_grp)
         self.mac_bl_list = QListWidget()
         self.mac_bl_list.setMinimumHeight(80)
@@ -512,7 +515,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(bl_grp)
 
         # Whitelist
-        wl_grp = QGroupBox("Allowed MACs (Whitelist)")
+        wl_grp = QGroupBox("Allowed MACs")
         wl_lay = QVBoxLayout(wl_grp)
         self.mac_wl_list = QListWidget()
         self.mac_wl_list.setMinimumHeight(80)
@@ -580,7 +583,7 @@ class MainWindow(QMainWindow):
             "SSH Brute-Force Detection — journalctl monitoring for failed logins\n"
             "DoS / ICMP Flood Detection — tcpdump sampling with pps thresholds\n"
             "IP Spoof Detection — ARP poisoning, TTL anomaly & bogon/subnet validation\n"
-            "MAC Address Filtering — whitelist / blacklist enforcement"
+            "MAC Address Filtering — Allow Only / Block Only"
         )
         modules.setAlignment(Qt.AlignCenter)
         modules.setStyleSheet("font-size: 12px; color: #8b949e; line-height: 1.6;")
@@ -735,7 +738,8 @@ class MainWindow(QMainWindow):
             self.spoof_wl_list.addItem(ip)
 
         mc = c["macfilter"]
-        idx = self.mac_mode_combo.findText(mc["mode"])
+        ui_mode = _MAC_MODE_CFG_TO_UI.get(mc.get("mode", "whitelist"), "Allow Only")
+        idx = self.mac_mode_combo.findText(ui_mode)
         if idx >= 0:
             self.mac_mode_combo.setCurrentIndex(idx)
         self.mac_wl_list.clear()
@@ -786,7 +790,9 @@ class MainWindow(QMainWindow):
             for i in range(self.spoof_wl_list.count())
         ]
 
-        c["macfilter"]["mode"] = self.mac_mode_combo.currentText()
+        c["macfilter"]["mode"] = _MAC_MODE_UI_TO_CFG.get(
+            self.mac_mode_combo.currentText(), "whitelist"
+        )
         c["macfilter"]["allowed_macs"] = [
             self.mac_wl_list.item(i).text()
             for i in range(self.mac_wl_list.count())
@@ -884,6 +890,7 @@ class MainWindow(QMainWindow):
         spoof.arp_table.clear()
         spoof.arp_cooldowns.clear()
         spoof.ttl_alert_cooldowns.clear()
+        spoof.blocked_macs.clear()
 
         self.statusBar().showMessage("All blocks cleared + DNS flushed", 3000)
 

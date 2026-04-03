@@ -94,18 +94,19 @@ def run_detector(cfg, stop_event=None):
     ensure_chain(CHAIN)
     flush_chain(CHAIN)
 
-    _emit(f"[START] MAC filter on {iface} (mode: {mode})")
+    mode_label = "Allow Only" if mode == "whitelist" else "Block Only"
+    _emit(f"[START] MAC filter on {iface} (mode: {mode_label})")
 
     if mode == "whitelist":
         macs = cfg["macfilter"]["allowed_macs"]
         if macs:
-            _emit(f"[INFO] Whitelisted MACs: {', '.join(macs)}")
+            _emit(f"[INFO] Allowed MACs: {', '.join(macs)}")
         else:
-            _emit("[INFO] Whitelist empty — all MACs allowed (add MACs to enforce)")
+            _emit("[INFO] Allowed list empty — all MACs permitted (add MACs to enforce)")
     else:
         macs = cfg["macfilter"]["blocked_macs"]
         if macs:
-            _emit(f"[INFO] Blacklisted MACs: {', '.join(macs)}")
+            _emit(f"[INFO] Blocked MACs: {', '.join(macs)}")
 
     try:
         while stop_event is None or not stop_event.is_set():

@@ -14,7 +14,7 @@ import time
 import ipaddress
 from collections import defaultdict, deque
 
-from modules.firewall import ensure_chain, flush_chain, block_ip, ts
+from modules.firewall import ensure_chain, flush_chain, block_ip, block_mac, ts
 from modules.netutil import get_interface_ip, get_local_network, get_default_gateway
 
 CHAIN = "NIDS_SPOOF"
@@ -31,6 +31,7 @@ arp_cooldowns = {}
 ttl_baselines = defaultdict(lambda: deque(maxlen=100))
 ttl_alert_cooldowns = {}
 blocked_ips = set()
+blocked_macs = set()
 _start_time = None
 
 STANDARD_TTLS = {32, 64, 128, 255}
@@ -100,6 +101,9 @@ def _handle_arp(pkt):
     if src_ip == _defense_ip:
         return
 
+    if src_mac in blocked_macs:
+        return
+
     now = time.time()
 
     if src_ip in arp_table:
@@ -112,7 +116,10 @@ def _handle_arp(pkt):
                     f"from {old_mac} → {src_mac} (possible MitM)"
                 )
                 arp_cooldowns[cooldown_key] = now
-                _block(src_ip, "ARP poisoning")
+                block_mac(CHAIN, src_mac)
+                blocked_macs.add(src_mac)
+                _emit(f"[BLOCK] Blocked attacker MAC {src_mac} (ARP poisoning)")
+                return
 
     arp_table[src_ip] = src_mac
 
@@ -217,6 +224,7 @@ def run_detector(cfg, stop_event=None):
     ttl_baselines.clear()
     ttl_alert_cooldowns.clear()
     blocked_ips.clear()
+    blocked_macs.clear()
 
     ensure_chain(CHAIN)
     flush_chain(CHAIN)
