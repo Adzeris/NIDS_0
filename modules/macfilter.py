@@ -12,7 +12,7 @@ import threading
 from modules.firewall import ensure_chain, flush_chain, block_mac, unblock_mac, ts
 from config import load_config, save_config
 
-CHAIN = "NIDS_MAC"
+CHAIN = "NIDS_MACFILTER"
 
 _callback = None
 _blocked_macs = set()

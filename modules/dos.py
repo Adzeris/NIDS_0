@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from modules.firewall import ensure_chain, flush_chain, block_ip, ts
 
-CHAIN = "NIDS_BLOCK"
+CHAIN = "NIDS_DOS"
 blocked_ips = set()
 
 _callback = None

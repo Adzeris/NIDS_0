@@ -13,7 +13,7 @@ from modules.firewall import ensure_chain, flush_chain, block_ip, ts
 from modules.netutil import get_interface_ip
 from config import load_config, save_config
 
-CHAIN = "NIDS_BLOCK"
+CHAIN = "NIDS_PORTSCAN"
 
 seen_ports = defaultdict(deque)
 seen_syns = defaultdict(deque)

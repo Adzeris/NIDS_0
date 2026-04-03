@@ -10,7 +10,7 @@
   "portscan": {
     "window_sec": 5,
     "port_threshold": 23,
-    "syn_threshold": 40,
+    "syn_threshold": 33,
     "block_seconds": 120,
     "warmup_sec": 3
   },
@@ -35,7 +35,13 @@
     "mode": "whitelist",
     "allowed_macs": [],
     "blocked_macs": [],
-    "detected_macs": []
+    "detected_macs": [
+      {
+        "mac": "00:0C:29:AD:13:B7",
+        "last_ip": "192.168.92.129",
+        "first_seen": "2026-04-03 06:55:37"
+      }
+    ]
   },
   "logging": {
     "log_dir": "/home/kali/Desktop/nids_edit/logs",

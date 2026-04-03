@@ -259,16 +259,16 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop)
 
-        self.flush_btn = QPushButton("Flush DNS")
-        self.flush_btn.setObjectName("flushBtn")
-        self.flush_btn.clicked.connect(self._flush_dns)
+        self.unblock_btn = QPushButton("Unblock All")
+        self.unblock_btn.setObjectName("flushBtn")
+        self.unblock_btn.clicked.connect(self._unblock_all)
 
         self.running_label = QLabel("")
         self.running_label.setStyleSheet("color: #8b949e; font-style: italic;")
 
         top.addWidget(self.start_btn)
         top.addWidget(self.stop_btn)
-        top.addWidget(self.flush_btn)
+        top.addWidget(self.unblock_btn)
         top.addStretch()
         top.addWidget(self.running_label)
         root.addLayout(top)
@@ -613,7 +613,7 @@ class MainWindow(QMainWindow):
         self.mac_det_list.takeItem(row)
         self._save_config_from_ui()
         from modules.firewall import unblock_mac
-        unblock_mac("NIDS_MAC", mac)
+        unblock_mac("NIDS_MACFILTER", mac)
         self.statusBar().showMessage(f"MAC {mac} allowed — block removed", 3000)
 
     def _detected_to_blocked(self):
@@ -624,8 +624,8 @@ class MainWindow(QMainWindow):
         self.mac_det_list.takeItem(row)
         self._save_config_from_ui()
         from modules.firewall import ensure_chain, block_mac
-        ensure_chain("NIDS_MAC")
-        block_mac("NIDS_MAC", mac)
+        ensure_chain("NIDS_MACFILTER")
+        block_mac("NIDS_MACFILTER", mac)
         self.statusBar().showMessage(f"MAC {mac} blocked immediately", 3000)
 
     def _dismiss_detected(self):
@@ -659,12 +659,12 @@ class MainWindow(QMainWindow):
             mac = text.strip().upper()
             list_widget.addItem(mac)
             if list_widget is self.mac_wl_list:
-                unblock_mac("NIDS_MAC", mac)
+                unblock_mac("NIDS_MACFILTER", mac)
                 self.statusBar().showMessage(f"MAC {mac} allowed — block removed", 3000)
             elif list_widget is self.mac_bl_list:
                 from modules.firewall import ensure_chain, block_mac
-                ensure_chain("NIDS_MAC")
-                block_mac("NIDS_MAC", mac)
+                ensure_chain("NIDS_MACFILTER")
+                block_mac("NIDS_MACFILTER", mac)
                 self.statusBar().showMessage(f"MAC {mac} blocked immediately", 3000)
 
     def _rm_mac(self, list_widget):
@@ -673,7 +673,7 @@ class MainWindow(QMainWindow):
             mac = item.text().split(" ")[0].upper()
             list_widget.takeItem(list_widget.row(item))
             if list_widget is self.mac_bl_list:
-                unblock_mac("NIDS_MAC", mac)
+                unblock_mac("NIDS_MACFILTER", mac)
                 self.statusBar().showMessage(f"MAC {mac} unblocked", 3000)
             elif list_widget is self.mac_wl_list:
                 self.mac_det_list.addItem(mac)
@@ -831,8 +831,16 @@ class MainWindow(QMainWindow):
         if self.worker:
             self.worker.stop_engine()
 
-    def _flush_dns(self):
+    def _unblock_all(self):
         import subprocess
+        from modules.firewall import flush_chain
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        for chain in ["NIDS_PORTSCAN", "NIDS_BRUTEFORCE", "NIDS_DOS", "NIDS_SPOOF", "NIDS_MACFILTER"]:
+            flush_chain(chain)
+        self._on_log_line(f"{ts} [ENGINE] All iptables blocks cleared")
+
+        # Also flush DNS cache
         resolvers = [
             (["systemd-resolve", "--flush-caches"], "systemd-resolved"),
             (["resolvectl", "flush-caches"],         "resolvectl"),
@@ -840,17 +848,25 @@ class MainWindow(QMainWindow):
             (["sudo", "nscd", "-i", "hosts"],        "nscd"),
             (["sudo", "rndc", "flush"],              "BIND/named"),
         ]
-        ts = time.strftime("%Y-%m-%d %H:%M:%S")
         for cmd, name in resolvers:
             try:
                 res = subprocess.run(cmd, stdout=subprocess.DEVNULL,
                                      stderr=subprocess.DEVNULL, timeout=5)
                 if res.returncode == 0:
                     self._on_log_line(f"{ts} [ENGINE] DNS cache flushed via {name}")
-                    return
+                    break
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 continue
-        self._on_log_line(f"{ts} [ENGINE] DNS flush: no active caching resolver found")
+
+        # Clear runtime blocked sets so detectors can re-detect
+        from modules import portscan, dos, spoof, macfilter
+        for mod in [portscan, dos, spoof, macfilter]:
+            if hasattr(mod, 'blocked_ips'):
+                mod.blocked_ips.clear()
+            if hasattr(mod, '_blocked_macs'):
+                mod._blocked_macs.clear()
+
+        self.statusBar().showMessage("All blocks cleared + DNS flushed", 3000)
 
     def _on_log_line(self, line):
         self.log_view.appendPlainText(line)
