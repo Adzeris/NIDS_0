@@ -55,6 +55,13 @@ def delete_hook(chain, iface=None):
             break
 
 
+def destroy_chain(chain):
+    """Fully remove a chain: flush rules, remove INPUT hooks, delete chain."""
+    flush_chain(chain)
+    delete_hook(chain)
+    run(["sudo", "iptables", "-X", chain])
+
+
 def block_ip(chain, ip):
     run(["sudo", "iptables", "-I", chain, "1", "-s", ip, "-j", "DROP"])
 

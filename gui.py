@@ -836,8 +836,10 @@ class MainWindow(QMainWindow):
         from modules.firewall import flush_chain
         ts = time.strftime("%Y-%m-%d %H:%M:%S")
 
+        from modules.firewall import destroy_chain as _destroy
         for chain in ["NIDS_PORTSCAN", "NIDS_BRUTEFORCE", "NIDS_DOS", "NIDS_SPOOF", "NIDS_MACFILTER"]:
             flush_chain(chain)
+        _destroy("NIDS_BLOCK")
         self._on_log_line(f"{ts} [ENGINE] All iptables blocks cleared")
 
         # Also flush DNS cache
